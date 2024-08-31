@@ -11,7 +11,6 @@ import json
 import logging
 import re
 import pandas as pd
-import openpyxl
 import atexit
 
 def close_file_handler():
@@ -189,13 +188,15 @@ if __name__ == '__main__':
 
         # 获取类别
         base_url = 'https://www.amazon.sa'
-        soup = get_soup('https://www.amazon.sa/-/en/gp/bestsellers/?ref_=nav_em_cs_bestsellers_0_1_1_2&language=ar_AE')
+        soup = get_soup('https://www.amazon.ae/-/en/gp/bestsellers/?ref_=nav_em_cs_bestsellers_0_1_1_2&language=ar_AE')
         categores_soup = soup.find_all('div', attrs={'role': 'treeitem'})
         categores = {}
         for categore in categores_soup[1::]:
             url = categore.find('a').get('href')
             categores[categore.text] = base_url + str(url)
         logging.debug(f'categores: {categores}')
+
+        # print(categores)
 
         # 初始化json文件
         with open('result.json', 'w+', encoding='utf-8') as f:
@@ -228,11 +229,11 @@ if __name__ == '__main__':
             wait_time = random.randint(1, 5)
             time.sleep(wait_time)
 
-        with open('result.json', 'a+', encoding='utf-8') as f:
+        with open('amazon_result_ae.json', 'a+', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=4)
 
         # 生成excel文件
-        gen_excel('result.json')
+        gen_excel('amazon_result_ae.json')
 
     except Exception as e:
         logger.error(f'Unexcepted ERROR: {e}')
