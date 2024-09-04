@@ -11,7 +11,6 @@ import json
 import logging
 import re
 import pandas as pd
-import atexit
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -41,6 +40,7 @@ class Spider:
     
     def get_soup(self, url, wait_time=10, wait_time_per_page=5):
         driver = self.driver
+        self.url = url
         # 打开网页
         driver.get(url)
 
@@ -62,12 +62,15 @@ class Spider:
         soup = BeautifulSoup(html, 'html.parser')
         # 关闭浏览器
         driver.quit()
-        return soup
+        self.soup = soup
     
 class AmazonSpider(Spider):
-    def __init__(self, language, region):
+    def __init__(self, headless, no_gpu, language, region):
+        super().__init__(headless, no_gpu)
         self.language = language
         self.region = region
+        self.init_driver()
+        self.set_language()
 
     def set_language(self):
         if self.region == 'SA':
@@ -85,7 +88,8 @@ class AmazonSpider(Spider):
             self.title_key = 'title_ar'
 
     def get_categores(self, div_role='treeitem'):
-        soup = self.get_soup(self.bs_url)
+        self.logger.info(f'crawing categores page: {self.bs_url}')
+        soup = self.soup
         categores_soup = soup.find_all('div', attrs={'role': div_role})
         categores = {}
         for categore in categores_soup[1::]:
@@ -94,10 +98,11 @@ class AmazonSpider(Spider):
 
         self.categores = categores
 
-    def get_bs_title(self, bs_list_url, titles_div_id='gridItemRoot', title_span_class='zg-bdg-text'):
+    def get_bs_title(self, titles_div_id='gridItemRoot', title_span_class='zg-bdg-text'):
+        self.logger.info(f'crawing BS title in language: {self.language}')
         bs_title_info = {}
-        soup = self.get_soup(bs_list_url)
-        elements = self.soup.find_all('div', attrs={'id': titles_div_id})
+        soup = self.soup
+        elements = soup.find_all('div', attrs={'id': titles_div_id})
         for element in elements:
             number_element = element.find('span', attrs={'class': title_span_class})
             try:
@@ -113,11 +118,25 @@ class AmazonSpider(Spider):
             bs_title_info[number] = {self.title_key: title}
         return bs_title_info
     
+    def get_price_from_detail(self, price_span_class='a-offscreen'):
+        self.logger.info(f'crawing price from detail page: {self.language}')
+        detail_soup = self.soup
+        price = detail_soup.find('span', attrs={'class': price_span_class}).text
+            
+        # 检查获取到的price
+        price_str_pattern = re.compile(r'.*ريال')
+        match_test = price_str_pattern.match(price)
+        if not match_test:
+            price = 'None'
+
+        return price
+    
     def get_bs_info(self, categore, bs_elements_div_id='gridItemRoot', number_span_class='zg-bdg-text', bs_detail_url_a_class='a-link-normal aok-block',
                     price_pattern_re='^_cDEzb_p13n-sc-price_.*', img_div_class='a-section a-spacing-mini _cDEzb_noop_3Xbw5'
                     ):
         bs_info = {}
-        soup = self.get_soup()
+        bs_info[categore] = {}
+        soup = self.soup
         # 获取页面所有bs的元素
         bs_elements = soup.find_all('div', attrs={'id': bs_elements_div_id})
         for element in bs_elements:
@@ -128,37 +147,23 @@ class AmazonSpider(Spider):
             except AttributeError as e:
                 self.logger.error(f'number_element crawing failed. {e}  \n crawing element: {element}')
                 number = 'None'
-            # 获取阿拉伯文标题
-            # try:
-            #     title_pattern = re.compile(title_pattern_re)
-            #     title_element = element.find('div', attrs={'class': title_pattern})
-            #     title = title_element.text
-            # except AttributeError as e:
-            #     self.logger.error(f'title_element crawing failed. {e} \n crawing element: {element}')
-            #     title = 'None'
             # 获取商品详情页url
             uri = element.find('a', attrs={'class': bs_detail_url_a_class}).get('href')
             url = self.base_url + uri
             decoded_url = unquote(url)
             # 获取Asin
-            asin = decoded_url.split('/')[5]
+            asin = decoded_url.split('/')[7]
             # 获取价格
             try:
                 price_pattern = re.compile(price_pattern_re)
                 price_element = element.find('span', attrs={'class': price_pattern})
                 if price_element == None:
-                    detail_soup = self.get_soup(url)
-                    self.logger.info(f'Crawling in progress BS detail as can not craw price from main page: {categore}/{number} url: {url}')
-                    price = detail_soup.find('span', attrs={'class': 'a-offscreen'}).text
+                    detail = AmazonSpider(headless=self.headless, no_gpu=self.no_gpu, region=self.region, language=self.language)
+                    detail.get_soup(url= url + self.language_arg)
+                    price = detail.get_price_from_detail()
                 else:
                     price = price_element.text
-                # 检查获取到的price
-                price_str_pattern = re.compile(r'.*ريال')
-                match_test = price_str_pattern.match(price)
-                if not match_test:
-                    price = 'None'
             except AttributeError as e:
-                self.logger.error(f'Crawling price None both in BS detail and main page: {categore}/{number} url: {url}')
                 price = 'None'
             # 获取图片url
             try:
@@ -171,8 +176,91 @@ class AmazonSpider(Spider):
             except TypeError as e:
                 self.logger.error(f'Crawling img failed in main page: {categore}/{number} url: {url}. Raise ERROR: {e}')
                 decoded_img_url = 'None'
-
-            bs_info[categore] = number
             bs_info[categore][number] = {'url': decoded_url, 'img_url': decoded_img_url, 'asin': asin, 'price': price}
         self.bs_info = bs_info
         return bs_info
+    
+class GenExecl:
+    def __init__(self, json_filename, result_filename, data):
+        self.json_filename = json_filename
+        self.data = data
+        self.result_filename = result_filename
+
+    def pickling(self):
+        with open(self.json_filename, 'w', encoding='utf-8') as f:
+            json_str = json.dump(self.data, f)
+
+    def gen_execl(self):
+        with open(self.json_filename, 'r', encoding='utf-8') as f:
+            json_data = json.load(f)
+
+        # 创建一个excel写入对象
+        writer = pd.ExcelWriter(self.result_filename)
+
+        for categore, items in json_data.items():
+            data = []
+            for index, item_detail in items.items():
+                item_detail['number'] = index
+                data.append(item_detail)
+            df = pd.DataFrame(data)
+            cols = df.columns.tolist()
+            cols = ['number'] + [col for col in cols if col != 'number']
+            df = df[cols]
+            df.to_excel(writer, sheet_name=categore, index=False)
+
+        writer._save()
+    
+
+if __name__ == '__main__':
+    def crawing_amazon(region, json_filename, result_filename):
+        result = {}
+        # crawing AWS SA BS site
+        aws_spider = AmazonSpider(headless=True, no_gpu=True, region=region, language='EN')
+        aws_spider.get_soup(url=aws_spider.bs_url + aws_spider.language_arg)
+        aws_spider.get_categores()
+        for categore, categore_url in aws_spider.categores.items():
+            # en title
+            aws_bs_spider_en = AmazonSpider(headless=True, no_gpu=True, region=region, language='EN')
+            aws_bs_spider_en.get_soup(url=categore_url + aws_bs_spider_en.language_arg)
+            titles_en = aws_bs_spider_en.get_bs_title()
+            # ar title
+            aws_bs_spider_ar = AmazonSpider(headless=True, no_gpu=True, region=region, language='AR')
+            aws_bs_spider_ar.get_soup(url=categore_url + aws_bs_spider_ar.language_arg)
+            titles_ar = aws_bs_spider_ar.get_bs_title()
+
+            bs_info = aws_bs_spider_en.get_bs_info(categore=categore)
+            for num in bs_info[categore].keys():
+                title_key_en = aws_bs_spider_en.title_key
+                bs_info[categore][num][title_key_en] = titles_en[num][title_key_en]
+                title_key_ar = aws_bs_spider_ar.title_key
+                bs_info[categore][num][title_key_ar] = titles_ar[num][title_key_ar]
+
+            # page 2
+            categore_url_2 = categore_url + '?ie=UTF8&pg=2'
+            # en title
+            aws_bs_spider_en_2 = AmazonSpider(headless=True, no_gpu=True, region=region, language='EN')
+            aws_bs_spider_en_2.get_soup(url=categore_url_2 + aws_bs_spider_en_2.language_arg.replace('?', '&'))
+            titles_en_2 = aws_bs_spider_en_2.get_bs_title()
+            # ar title
+            aws_bs_spider_ar_2 = AmazonSpider(headless=True, no_gpu=True, region=region, language='AR')
+            aws_bs_spider_ar_2.get_soup(url=categore_url_2 + aws_bs_spider_ar_2.language_arg.replace('?', '&'))
+            titles_ar_2 = aws_bs_spider_ar_2.get_bs_title()
+
+            bs_info_2 = aws_bs_spider_en_2.get_bs_info(categore=categore)
+            for num in bs_info_2[categore].keys():
+                title_key_en = aws_bs_spider_en_2.title_key
+                bs_info_2[categore][num][title_key_en] = titles_en_2[num][title_key_en]
+                title_key_ar = aws_bs_spider_ar_2.title_key
+                bs_info_2[categore][num][title_key_ar] = titles_ar_2[num][title_key_ar]
+
+            bs_info[categore].update(bs_info_2[categore])
+            result.update(bs_info)
+
+            g = GenExecl(data=result, json_filename=json_filename, result_filename=result_filename)
+            g.pickling()
+            g.gen_execl()
+
+    
+    crawing_amazon(region='SA', json_filename='amazon_bs_sa.json', result_filename='amazon_bs_sa.xlsx')
+    crawing_amazon(region='UAE', json_filename='amazon_bs_uae.json', result_filename='amazon_bs_uae.xlsx')
+        
