@@ -2,7 +2,7 @@
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from bs4 import BeautifulSoup 
+from bs4 import BeautifulSoup
 from webdriver_manager.chrome import ChromeDriverManager
 from urllib.parse import unquote
 import time
@@ -12,7 +12,8 @@ import logging
 import re
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 class Spider:
@@ -37,7 +38,7 @@ class Spider:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         self.driver = driver
-    
+
     def get_soup(self, url, wait_time=10, wait_time_per_page=5):
         driver = self.driver
         self.url = url
@@ -48,11 +49,14 @@ class Spider:
         driver.implicitly_wait(wait_time)
 
         # 模拟滚动到底部
-        last_height = driver.execute_script("return document.body.scrollHeight")
+        last_height = driver.execute_script(
+            "return document.body.scrollHeight")
         while True:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            driver.execute_script(
+                "window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(wait_time_per_page)
-            new_height = driver.execute_script("return document.body.scrollHeight")
+            new_height = driver.execute_script(
+                "return document.body.scrollHeight")
             if new_height == last_height:
                 break
             last_height = new_height
@@ -63,12 +67,14 @@ class Spider:
         # 关闭浏览器
         driver.quit()
         self.soup = soup
-    
+
+
 class AmazonSpider(Spider):
-    def __init__(self, headless, no_gpu, language, region):
+    def __init__(self, headless, no_gpu, language, region, page2=False):
         super().__init__(headless, no_gpu)
         self.language = language
         self.region = region
+        self.page2 = page2
         self.init_driver()
         self.set_language()
 
@@ -79,16 +85,21 @@ class AmazonSpider(Spider):
         elif self.region == 'UAE':
             self.base_url = 'https://www.amazon.ae'
             self.bs_url = 'https://www.amazon.ae/-/en/gp/bestsellers/'
-        
+
         if self.language == 'EN':
             self.language_arg = '?language=en_AE'
             self.title_key = 'title_en'
+            if self.page2:
+                self.language_arg = '&language=en_AE'
         elif self.language == 'AR':
             self.language_arg = '?language=ar_AE'
             self.title_key = 'title_ar'
+            if self.page2:
+                self.language_arg = '&language=ar_AE'
 
     def get_categores(self, div_role='treeitem'):
-        self.logger.info(f'crawing categores page: {self.bs_url}')
+        self.logger.info(
+            f'crawing categores page: {self.bs_url}, url: {self.url}')
         soup = self.soup
         categores_soup = soup.find_all('div', attrs={'role': div_role})
         categores = {}
@@ -99,30 +110,35 @@ class AmazonSpider(Spider):
         self.categores = categores
 
     def get_bs_title(self, titles_div_id='gridItemRoot', title_span_class='zg-bdg-text'):
-        self.logger.info(f'crawing BS title in language: {self.language}')
+        self.logger.info(
+            f'crawing BS title in language: {self.language}, url: {self.url}')
         bs_title_info = {}
         soup = self.soup
         elements = soup.find_all('div', attrs={'id': titles_div_id})
         for element in elements:
-            number_element = element.find('span', attrs={'class': title_span_class})
+            number_element = element.find(
+                'span', attrs={'class': title_span_class})
             try:
                 number = number_element.text
             except AttributeError as e:
                 number = 'None'
             try:
                 title_pattern = re.compile("^_cDEzb_p13n-sc-css-line-clamp.*")
-                title_element = element.find('div', attrs={'class': title_pattern})
+                title_element = element.find(
+                    'div', attrs={'class': title_pattern})
                 title = title_element.text
             except AttributeError as e:
                 title = 'None'
             bs_title_info[number] = {self.title_key: title}
         return bs_title_info
-    
-    def get_price_from_detail(self, price_span_class='a-offscreen'):
-        self.logger.info(f'crawing price from detail page: {self.language}')
+
+    def get_price_from_detail(self, detail_url, price_span_class='a-offscreen'):
+        self.logger.info(
+            f'crawing price from detail page: {self.language}, url: {detail_url}')
         detail_soup = self.soup
-        price = detail_soup.find('span', attrs={'class': price_span_class}).text
-            
+        price = detail_soup.find(
+            'span', attrs={'class': price_span_class}).text
+
         # 检查获取到的price
         price_str_pattern = re.compile(r'.*ريال')
         match_test = price_str_pattern.match(price)
@@ -130,9 +146,8 @@ class AmazonSpider(Spider):
             price = 'None'
 
         return price
-    
-    def get_bs_info(self, categore, bs_elements_div_id='gridItemRoot', number_span_class='zg-bdg-text', bs_detail_url_a_class='a-link-normal aok-block',
-                    price_pattern_re='^_cDEzb_p13n-sc-price_.*', img_div_class='a-section a-spacing-mini _cDEzb_noop_3Xbw5'
+
+    def get_bs_info(self, categore, bs_elements_div_id='gridItemRoot', number_span_class='zg-bdg-text', bs_detail_url_a_class='a-link-normal aok-block', price_pattern_re='^_cDEzb_p13n-sc-price_.*', img_div_class='a-section a-spacing-mini _cDEzb_noop_3Xbw5'
                     ):
         bs_info = {}
         bs_info[categore] = {}
@@ -140,46 +155,56 @@ class AmazonSpider(Spider):
         # 获取页面所有bs的元素
         bs_elements = soup.find_all('div', attrs={'id': bs_elements_div_id})
         for element in bs_elements:
-            number_element = element.find('span', attrs={'class': number_span_class})
+            number_element = element.find(
+                'span', attrs={'class': number_span_class})
             # 获取排名
             try:
                 number = number_element.text
             except AttributeError as e:
-                self.logger.error(f'number_element crawing failed. {e}  \n crawing element: {element}')
+                self.logger.error(
+                    f'number_element crawing failed. {e}  \n crawing element: {element}')
                 number = 'None'
             # 获取商品详情页url
-            uri = element.find('a', attrs={'class': bs_detail_url_a_class}).get('href')
-            url = self.base_url + uri
-            decoded_url = unquote(url)
+            uri = element.find(
+                'a', attrs={'class': bs_detail_url_a_class}).get('href')
+            detail_url = self.base_url + uri
+            decoded_url = unquote(detail_url)
             # 获取Asin
             asin = decoded_url.split('/')[7]
             # 获取价格
             try:
                 price_pattern = re.compile(price_pattern_re)
-                price_element = element.find('span', attrs={'class': price_pattern})
+                price_element = element.find(
+                    'span', attrs={'class': price_pattern})
                 if price_element == None:
-                    detail = AmazonSpider(headless=self.headless, no_gpu=self.no_gpu, region=self.region, language=self.language)
-                    detail.get_soup(url= url + self.language_arg)
-                    price = detail.get_price_from_detail()
+                    detail = AmazonSpider(
+                        headless=self.headless, no_gpu=self.no_gpu, region=self.region, language=self.language)
+                    detail.get_soup(url=detail_url + self.language_arg)
+                    price = detail.get_price_from_detail(detail_url=detail_url)
                 else:
                     price = price_element.text
             except AttributeError as e:
                 price = 'None'
             # 获取图片url
             try:
-                img_element = element.find('div', attrs={'class': img_div_class})
+                img_element = element.find(
+                    'div', attrs={'class': img_div_class})
                 img_url = img_element.find('img')['src']
                 decoded_img_url = unquote(img_url)
             except AttributeError as e:
-                self.logger.error(f'Crawling img failed in main page: {categore}/{number} url: {url}')
+                self.logger.error(
+                    f'Crawling img failed in main page: {categore}/{number} url: {self.url}')
                 decoded_img_url = 'None'
             except TypeError as e:
-                self.logger.error(f'Crawling img failed in main page: {categore}/{number} url: {url}. Raise ERROR: {e}')
+                self.logger.error(
+                    f'Crawling img failed in main page: {categore}/{number} url: {self.url}. Raise ERROR: {e}')
                 decoded_img_url = 'None'
-            bs_info[categore][number] = {'url': decoded_url, 'img_url': decoded_img_url, 'asin': asin, 'price': price}
+            bs_info[categore][number] = {
+                'detail_url': decoded_url, 'img_url': decoded_img_url, 'asin': asin, 'price': price}
         self.bs_info = bs_info
         return bs_info
-    
+
+
 class GenExecl:
     def __init__(self, json_filename, result_filename, data):
         self.json_filename = json_filename
@@ -209,24 +234,43 @@ class GenExecl:
             df.to_excel(writer, sheet_name=categore, index=False)
 
         writer._save()
-    
+
 
 if __name__ == '__main__':
-    def crawing_amazon(region, json_filename, result_filename):
+    def crawing_amazon(region):
         result = {}
         # crawing AWS SA BS site
-        aws_spider = AmazonSpider(headless=True, no_gpu=True, region=region, language='EN')
+        aws_spider = AmazonSpider(
+            headless=True, no_gpu=True, region=region, language='EN')
         aws_spider.get_soup(url=aws_spider.bs_url + aws_spider.language_arg)
         aws_spider.get_categores()
         for categore, categore_url in aws_spider.categores.items():
-            # en title
-            aws_bs_spider_en = AmazonSpider(headless=True, no_gpu=True, region=region, language='EN')
-            aws_bs_spider_en.get_soup(url=categore_url + aws_bs_spider_en.language_arg)
-            titles_en = aws_bs_spider_en.get_bs_title()
-            # ar title
-            aws_bs_spider_ar = AmazonSpider(headless=True, no_gpu=True, region=region, language='AR')
-            aws_bs_spider_ar.get_soup(url=categore_url + aws_bs_spider_ar.language_arg)
-            titles_ar = aws_bs_spider_ar.get_bs_title()
+            titles_en = {}
+            titles_ar = {}
+            titles_en_2 = {}
+            titles_ar_2 = {}
+            result = {}
+            while titles_en == {}:
+                # en title
+                aws_bs_spider_en = AmazonSpider(
+                    headless=True, no_gpu=True, region=region, language='EN')
+                aws_bs_spider_en.get_soup(
+                    url=categore_url + aws_bs_spider_en.language_arg)
+                titles_en = aws_bs_spider_en.get_bs_title()
+
+                sleep_time = random.randint(5, 10)
+                time.sleep(sleep_time)
+
+            while titles_ar == {}:
+                # ar title
+                aws_bs_spider_ar = AmazonSpider(
+                    headless=True, no_gpu=True, region=region, language='AR')
+                aws_bs_spider_ar.get_soup(
+                    url=categore_url + aws_bs_spider_ar.language_arg)
+                titles_ar = aws_bs_spider_ar.get_bs_title()
+
+                sleep_time = random.randint(5, 10)
+                time.sleep(sleep_time)
 
             bs_info = aws_bs_spider_en.get_bs_info(categore=categore)
             for num in bs_info[categore].keys():
@@ -235,16 +279,32 @@ if __name__ == '__main__':
                 title_key_ar = aws_bs_spider_ar.title_key
                 bs_info[categore][num][title_key_ar] = titles_ar[num][title_key_ar]
 
+            sleep_time = random.randint(5, 10)
+            time.sleep(sleep_time)
+
             # page 2
             categore_url_2 = categore_url + '?ie=UTF8&pg=2'
-            # en title
-            aws_bs_spider_en_2 = AmazonSpider(headless=True, no_gpu=True, region=region, language='EN')
-            aws_bs_spider_en_2.get_soup(url=categore_url_2 + aws_bs_spider_en_2.language_arg.replace('?', '&'))
-            titles_en_2 = aws_bs_spider_en_2.get_bs_title()
-            # ar title
-            aws_bs_spider_ar_2 = AmazonSpider(headless=True, no_gpu=True, region=region, language='AR')
-            aws_bs_spider_ar_2.get_soup(url=categore_url_2 + aws_bs_spider_ar_2.language_arg.replace('?', '&'))
-            titles_ar_2 = aws_bs_spider_ar_2.get_bs_title()
+            while titles_en_2 == {}:
+                # en title
+                aws_bs_spider_en_2 = AmazonSpider(
+                    headless=True, no_gpu=True, region=region, language='EN', page2=True)
+                aws_bs_spider_en_2.get_soup(
+                    url=categore_url_2 + aws_bs_spider_en_2.language_arg)
+                titles_en_2 = aws_bs_spider_en_2.get_bs_title()
+
+                sleep_time = random.randint(5, 10)
+                time.sleep(sleep_time)
+
+            while titles_ar_2 == {}:
+                # ar title
+                aws_bs_spider_ar_2 = AmazonSpider(
+                    headless=True, no_gpu=True, region=region, language='AR', page2=True)
+                aws_bs_spider_ar_2.get_soup(
+                    url=categore_url_2 + aws_bs_spider_ar_2.language_arg)
+                titles_ar_2 = aws_bs_spider_ar_2.get_bs_title()
+
+                sleep_time = random.randint(5, 10)
+                time.sleep(sleep_time)
 
             bs_info_2 = aws_bs_spider_en_2.get_bs_info(categore=categore)
             for num in bs_info_2[categore].keys():
@@ -256,11 +316,15 @@ if __name__ == '__main__':
             bs_info[categore].update(bs_info_2[categore])
             result.update(bs_info)
 
-            g = GenExecl(data=result, json_filename=json_filename, result_filename=result_filename)
-            g.pickling()
-            g.gen_execl()
+        return result
 
-    
-    crawing_amazon(region='SA', json_filename='amazon_bs_sa.json', result_filename='amazon_bs_sa.xlsx')
-    crawing_amazon(region='UAE', json_filename='amazon_bs_uae.json', result_filename='amazon_bs_uae.xlsx')
-        
+    result = crawing_amazon(region='SA')
+    g = GenExecl(data=result, json_filename='amazon_bs_sa.json',
+                 result_filename='amazon_bs_sa.xlsx')
+    g.pickling()
+    g.gen_execl()
+
+    # sleep_time = random.randint(30,60)
+    # time.sleep(sleep_time)
+    # crawing_amazon(region='UAE', json_filename='amazon_bs_uae.json',
+    #                result_filename='amazon_bs_uae.xlsx')
