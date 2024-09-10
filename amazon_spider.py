@@ -255,16 +255,15 @@ def get_titles(categore, categore_url, base_url, region, retry):
     for num in titles_en.keys():
         titles_en[num].update(titles_ar[num])
     titles = titles_en
-    pickling = GenExecl(data=titles, json_filename=f'./json_files/{categore}_titles_{region}.json', result_filename=None)
+    pickling = GenExecl(data=titles, json_filename=f'./json_files/amazon_{categore}_titles_{region}.json', result_filename=None)
     pickling.pickling()
     return titles, categore_en_obj_1, categore_en_obj_2, categore_ar_obj_1, categore_ar_obj_2
 
 def main(base_url, bs_url, json_filename, result_filename, region, retry, asin_pos):
-    # SA
-    sa = AmazonSpider(url=bs_url, base_url=base_url)
-    sa.get_categores()
+    spider = AmazonSpider(url=bs_url, base_url=base_url)
+    spider.get_categores()
     result = {}
-    for categore, categore_url in sa.categores.items():
+    for categore, categore_url in spider.categores.items():
         titles, categore_en_obj_1, categore_en_obj_2, _, _ = get_titles(categore=categore, categore_url=categore_url, base_url=base_url, region=region, retry=retry)
         bs_info_1 = categore_en_obj_1.get_bs_info(categore=categore, region=region, asin_pos=asin_pos)
         bs_info_2 = categore_en_obj_2.get_bs_info(categore=categore, region=region, asin_pos=asin_pos)
@@ -290,23 +289,23 @@ def main(base_url, bs_url, json_filename, result_filename, region, retry, asin_p
 
 if __name__ == '__main__':
     # # SA
-    # main(base_url='https://www.amazon.sa', bs_url='https://www.amazon.sa/-/en/gp/bestsellers', json_filename='./json_files/amazon_bs_sa.json', result_filename='amazon_bs_sa.xlsx', region='sa', retry=5, asin_pos=7)
+    # main(base_url='https://www.amazon.sa', bs_url='https://www.amazon.sa/-/en/gp/bestsellers', json_filename='./json_files/amazon_bs_sa.json', result_filename='result/amazon_bs_sa.xlsx', region='sa', retry=5, asin_pos=7)
 
     # random_wait = random.randint(5, 15)
     # time.sleep(random_wait)
 
     # # UAE
-    # main(base_url='https://www.amazon.ae', bs_url='https://www.amazon.ae/-/en/gp/bestsellers', json_filename='./json_files/amazon_bs_ae.json', result_filename='amazon_bs_ae.xlsx', region='ae', retry=5, asin_pos=5)
+    # main(base_url='https://www.amazon.ae', bs_url='https://www.amazon.ae/-/en/gp/bestsellers', json_filename='./json_files/amazon_bs_ae.json', result_filename='result/amazon_bs_ae.xlsx', region='ae', retry=5, asin_pos=5)
 
     # SA new
-    # main(base_url='https://www.amazon.sa', bs_url='https://www.amazon.sa/gp/new-releases?language=en_AE', json_filename='./json_files/amazon_new_sa.json', result_filename='amazon_new_sa.xlsx', region='sa', retry=5, asin_pos=4)
+    # main(base_url='https://www.amazon.sa', bs_url='https://www.amazon.sa/gp/new-releases?language=en_AE', json_filename='./json_files/amazon_new_sa.json', result_filename='result/amazon_new_sa.xlsx', region='sa', retry=5, asin_pos=4)
 
     # random_wait = random.randint(5, 15)
     # time.sleep(random_wait)
 
-    # # UAE new
-    # main(base_url='https://www.amazon.ae', bs_url='https://www.amazon.ae/gp/new-releases?language=en_AE', json_filename='./json_files/amazon_new_ae.json', result_filename='amazon_new_ae.xlsx', region='ae', retry=5, asin_pos=5)
+    # UAE new
+    main(base_url='https://www.amazon.ae', bs_url='https://www.amazon.ae/gp/new-releases?language=en_AE', json_filename='./json_files/amazon_new_ae.json', result_filename='result/amazon_new_ae.xlsx', region='ae', retry=5, asin_pos=5)
 
-    g = GenExecl(data=None, json_filename='./json_files/amazon_new_ae.json', result_filename='amazon_new_ae.xlsx')
-    g.gen_execl()
+    # g = GenExecl(data=None, json_filename='./json_files/amazon_new_ae.json', result_filename='amazon_new_ae.xlsx')
+    # g.gen_execl()
 
